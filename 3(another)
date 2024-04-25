@@ -1,0 +1,99 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras import layers
+import os
+
+# Define batch specifications
+batch_size = 32  # You can adjust this based on your preference
+img_height, img_width = 224, 224  # Adjust these dimensions based on your images
+
+# Define paths to the training and validation datasets
+train_dataset_path = '/home/abhishek/Desktop/PRACTICALS/DL/3(another)/New Plant Diseases Dataset(Augmented)/train'
+valid_dataset_path = '/home/abhishek/Desktop/PRACTICALS/DL/3(another)/New Plant Diseases Dataset(Augmented)/valid'
+
+# Load and preprocess the training dataset with error handling
+training_ds = tf.keras.preprocessing.image_dataset_from_directory(
+    train_dataset_path,
+    seed=42,
+    image_size=(img_height, img_width),
+    batch_size=batch_size,
+    label_mode='int',  # Use 'int' labels for sparse categorical_crossentropy
+    validation_split=0.2,
+    subset='training',
+)
+
+# Resize images while preserving aspect ratio
+def resize_with_aspect_ratio(image, label):
+    resized_image = tf.image.resize_with_pad(image, img_height, img_width)
+    return resized_image, label
+training_ds = training_ds.map(resize_with_aspect_ratio)
+
+# Load and preprocess the validation dataset with error handling
+validation_ds = tf.keras.preprocessing.image_dataset_from_directory(
+    valid_dataset_path,
+    seed=42,
+    image_size=(img_height, img_width),  # Resize the images here
+    batch_size=batch_size,
+    label_mode='int',  # Use 'int' labels for sparse categorical_crossentropy
+    validation_split=0.2,
+    subset='validation'
+)
+
+
+# Get class names from the directory structure
+class_names = sorted(os.listdir(train_dataset_path))
+print("Class names:", class_names)
+
+# Define the CNN model
+MyCnn = tf.keras.models.Sequential([
+    layers.BatchNormalization(),
+    layers.Conv2D(32, 3, activation='relu'),
+    layers.MaxPooling2D(),
+    layers.Conv2D(64, 3, activation='relu'),
+    layers.MaxPooling2D(),
+    layers.Conv2D(128, 3, activation='relu'),
+    layers.MaxPooling2D(),
+    layers.Flatten(),
+    layers.Dense(256, activation='relu'),
+    layers.Dense(len(class_names), activation='softmax')
+])
+
+# Compile the model
+MyCnn.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+# Train the model
+retVal = MyCnn.fit(training_ds, validation_data=validation_ds, epochs=2)
+
+plt.plot(retVal.history['loss'], label = 'training loss')
+plt.plot(retVal.history['accuracy'], label = 'training accuracy')
+plt.legend()
+
+AccuracyVector = []
+plt.figure(figsize=(30, 30))
+
+# Limit the loop to the number of images in the batch
+num_images_to_visualize = min(40, validation_ds.cardinality().numpy() * batch_size)
+for images, labels in validation_ds.take(1):
+    predictions = MyCnn.predict(images)
+    predlabel = []
+    prdlbl = []
+    for mem in predictions:
+        predlabel.append(class_names[np.argmax(mem)])
+        prdlbl.append(np.argmax(mem))
+    AccuracyVector = np.array(prdlbl) == labels
+    # Print the shape of the 'images' tensor
+    print("Shape of 'images' tensor:", images.shape)
+    # Limit the loop to the actual number of images in the batch
+    for i in range(min(num_images_to_visualize, images.shape[0])):
+        ax = plt.subplot(10, 4, i + 1)
+        plt.imshow(images[i].numpy().astype("uint8"))
+        plt.title('Pred: '+ predlabel[i]+' actl:'+class_names[labels[i]] )
+        plt.axis('off')
+        plt.grid(True)
+plt.show()
+
+plt.plot(retVal.history['val_loss'], label = 'validation loss')
+plt.plot(retVal.history['val_accuracy'], label = 'validation accuracy')
+plt.legend()
